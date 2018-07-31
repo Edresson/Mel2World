@@ -19,4 +19,4 @@ class Hyperparams:
 
     # data
     data_dir = "/data/private/voice/LJSpeech-1.1/wavs/"
-    
+    r = 4 # Reduction factor. Do not change this.

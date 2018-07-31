@@ -68,3 +68,17 @@ def get_spectrograms(fpath):
     return mel
 
 
+def load_spectrograms(fpath):
+    '''Read the wave file in `fpath`
+    and extracts spectrograms'''
+
+    mel = get_spectrograms(fpath)
+    t = mel.shape[0]
+
+    # Marginal padding for reduction shape sync.
+    num_paddings = hp.r - (t % hp.r) if t % hp.r != 0 else 0
+    mel = np.pad(mel, [[0, num_paddings], [0, 0]], mode="constant")
+
+    # Reduction
+    mel = mel[::hp.r, :]
+    return mel
