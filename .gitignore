@@ -12,10 +12,12 @@ lm/timit-lm.klm
 
 kDS.sh
 kDS-LOCAL.sh
-
+mels/*
+worlds/*
 data/*
 datasets/*
 !enron*
 !e00*
 !live-rec-test.py
 !data-recorder.py
+__pycache__/*

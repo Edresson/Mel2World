@@ -20,7 +20,7 @@ YTest=[]
 data_list=os.listdir(hp.data_dir)
 data_lenght=len(data_list)
 
-for i in tqdm.tqdm(range(0,4)):#data_lenght
+for i in tqdm.tqdm(range(0,data_lenght)):
     mel= np.array(load_spectrograms(hp.data_dir+'/'+data_list[i])) # mel spectrogram
     f0,sp,ap=wav2world(hp.data_dir+'/'+data_list[i])
     world=np.array(world_features_to_one_tensor(f0,sp,ap)) # world features
