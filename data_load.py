@@ -15,116 +15,63 @@ import codecs
 import re
 import os
 import unicodedata
-
-def load_vocab():
-    char2idx = {char: idx for idx, char in enumerate(hp.vocab)}
-    idx2char = {idx: char for idx, char in enumerate(hp.vocab)}
-    return char2idx, idx2char
-
-def text_normalize(text):
-    text = ''.join(char for char in unicodedata.normalize('NFD', text)
-                           if unicodedata.category(char) != 'Mn') # Strip accent
-    text = text.lower()
-    text = re.sub("[^{}]".format(hp.vocab), " ", text)
-    text = re.sub("[ ]+", " ", text)
-    return text
-
-def load_data(mode="train"):
+import sys
+import librosa
+def load_data():
     '''Loads data
-      Args:
-          mode: "train" or "synthesize".
     '''
-    # Load vocabulary
-    char2idx, idx2char = load_vocab()
+    fpaths=os.listdir(hp.data_dir)
+    audio_lenghts = []
+    for path in fpaths:
+        audio_lenghts.append(librosa.get_duration(filename=os.path.join(hp.data_dir,path)))
+        
+        
+    return fpaths, audio_lenghts
 
-    if mode=="train":
-        if "LJ" in hp.data:
-            # Parse
-            fpaths, text_lengths, texts = [], [], []
-            transcript = os.path.join(hp.data, 'metadata.csv')
-            lines = codecs.open(transcript, 'r', 'utf-8').readlines()
-            for line in lines:
-                fname, _, text = line.strip().split("|")
 
-                fpath = os.path.join(hp.data, "wavs", fname + ".wav")
-                fpaths.append(fpath)
-                text = text_normalize(text) + "E"  # E: EOS
-                text = [char2idx[char] for char in text]
-                text_lengths.append(len(text))
-                texts.append(np.array(text, np.int32).tostring())
-
-            return fpaths, text_lengths, texts
-        else: # nick or kate
-            # Parse
-            fpaths, text_lengths, texts = [], [], []
-            transcript = os.path.join(hp.data, 'metadata.csv')
-            lines = codecs.open(transcript, 'r', 'utf-8').readlines()
-            for line in lines:
-                fname, _, text, is_inside_quotes, duration = line.strip().split("|")
-                duration = float(duration)
-                if duration > 10. : continue
-
-                fpath = os.path.join(hp.data, fname)
-                fpaths.append(fpath)
-
-                text += "E"  # E: EOS
-                text = [char2idx[char] for char in text]
-                text_lengths.append(len(text))
-                texts.append(np.array(text, np.int32).tostring())
-
-        return fpaths, text_lengths, texts
-
-    else: # synthesize on unseen test text.
-        # Parse
-        lines = codecs.open(hp.test_data, 'r', 'utf-8').readlines()[1:]
-        sents = [text_normalize(line.split(" ", 1)[-1]).strip() + "E" for line in lines] # text normalization, E: EOS
-        texts = np.zeros((len(sents), hp.max_N), np.int32)
-        for i, sent in enumerate(sents):
-            texts[i, :len(sent)] = [char2idx[char] for char in sent]
-        return texts
 
 def get_batch():
     """Loads training data and put them in queues"""
     with tf.device('/cpu:0'):
         # Load data
-        fpaths, text_lengths, texts = load_data() # list
-        maxlen, minlen = max(text_lengths), min(text_lengths)
+        fpaths, audio_lengths = load_data() # list
+        maxlen, minlen = max(audio_lengths), min(audio_lengths)
 
         # Calc total batch count
         num_batch = len(fpaths) // hp.B
 
         # Create Queues
-        fpath, text_length, text = tf.train.slice_input_producer([fpaths, text_lengths, texts], shuffle=True)
+        fpath, audio_length = tf.train.slice_input_producer([fpaths,audio_lengths], shuffle=True)
 
-        # Parse
-        text = tf.decode_raw(text, tf.int32)  # (None,)
 
         if hp.prepro:
             def _load_spectrograms(fpath):
                 fname = os.path.basename(fpath)
+                fname = fname.decode("utf8")
                 mel = "mels/{}".format(fname.replace("wav", "npy"))
                 world = "worlds/{}".format(fname.replace("wav", "npy"))
-                return fname, np.load(mel), np.load(world)
+                mels = np.load(mel)
+                worlds = np.load(world)
+                return fname, mels, worlds
 
             fname, mel, world = tf.py_func(_load_spectrograms, [fpath], [tf.string, tf.float32, tf.float32])
         else:
-            fname, mel, world = tf.py_func(load_spectrograms, [fpath], [tf.string, tf.float32, tf.float32])  # (None, n_mels)
+            print(' Please Run Prepo.py !!')
 
         # Add shape information
         fname.set_shape(())
-        text.set_shape((None,))
         mel.set_shape((None, hp.n_mels))
-        world.set_shape((None, hp.n_fft//2+3))
+        world.set_shape((None, hp.num_lf0+hp.num_mgc+hp.num_bap))
 
         # Batching
-        _, (texts, mels, worlds, fnames) = tf.contrib.training.bucket_by_sequence_length(
-                                            input_length=text_length,
-                                            tensors=[text, mel, world, fname],
+        _, (mels, worlds, fnames) = tf.contrib.training.bucket_by_sequence_length(
+                                            input_length=audio_length,
+                                            tensors=[mel, world, fname],
                                             batch_size=hp.B,
                                             bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, 20)],
                                             num_threads=8,
                                             capacity=hp.B*4,
                                             dynamic_pad=True)
 
-    return mels, worlds, fnames, num_batch #texts,
+    return mels, worlds, fnames, num_batch
 

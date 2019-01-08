@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 # /usr/bin/python3
 
 from __future__ import print_function
@@ -50,9 +50,9 @@ def Mel2World(Y, training=True):
                             dropout_rate=hp.dropout_rate,
                             training=training,
                             scope="HC_{}".format(i)); i += 1
-    # -> (B, 2*T/r, c) -> (B, 10*T/r, c)
+    # -> (B, 2*T/r, c) -> (B, 2*4*T/r, c)
     tensor = conv1d_transpose(tensor,
-                                stride=5,
+                                stride=4,
                                 scope="D_{}".format(i),
                                 dropout_rate=hp.dropout_rate,
                                 training=training,); i += 1
@@ -79,9 +79,9 @@ def Mel2World(Y, training=True):
                         dropout_rate=hp.dropout_rate,
                         training=training,
                         scope="HC_{}".format(i)); i += 1
-    # -> (B, 10*T/r, 3+n_fft/2)
+    # -> (B, 7*T/r, num_lf0+num_mgc+num_bap) --> (B, 10*T/r,66)
     tensor = conv1d(tensor,
-                    filters=3+hp.n_fft//2,
+                    filters=hp.num_lf0+hp.num_mgc+hp.num_bap,
                     size=1,
                     rate=1,
                     dropout_rate=hp.dropout_rate,
@@ -127,15 +127,13 @@ class Graph:
             self.mels = tf.placeholder(tf.float32, shape=(None, None, hp.n_mels))
 
         if training:
-            # num==2 & training. Note that during training,
-            # the ground truth melspectrogram values are fed.
             with tf.variable_scope("Mel2World"):
                 self.Z_logits, self.Z = Mel2World(self.mels, training=training)
 
         if not training:
             # During inference, the predicted melspectrogram values are fed.
             with tf.variable_scope("Mel2World"):
-                self.Z_logits, self.Z = Mel2World(self.Y, training=training)
+                self.Z_logits, self.Z = Mel2World(self.mels, training=training)
 
         with tf.variable_scope("gs"):
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -185,12 +183,7 @@ if __name__ == '__main__':
 
                 # Write checkpoint files at every 1k steps
                 if gs % 1000 == 0:
-                    sv.saver.save(sess, logdir + '/model_gs_{}'.format(str(gs // 1000).zfill(3) + "k"))
-
-                    if num==1:
-                        # plot alignment
-                        alignments = sess.run(g.alignments)
-                        plot_alignment(alignments[0], str(gs // 1000).zfill(3) + "k", logdir)
+                    sv.saver.save(sess, logdir + '/model_gs_{}'.format(str(gs // 1000).zfill(3) + "k")
 
                 # break
                 if gs > hp.num_iterations: break

@@ -1,13 +1,40 @@
 import numpy as np
-import pyworld as pw
+import pyworld as vocoder
 import librosa
 from hyperparams import Hyperparams as hp
-
+import soundfile as sf
 import os, copy
 import matplotlib
 matplotlib.use('pdf')
 import matplotlib.pyplot as plt
 import tensorflow as tf
+
+int16_max = 32768.0
+
+def f0_normalize(x):
+	return np.log(np.where(x == 0.0, 1.0, x)).astype(np.float32)
+
+def f0_denormalize(x):
+	return np.where(x == 0.0, 0.0, np.exp(x.astype(np.float64)))
+
+def sp_normalize(x):
+	sp = int16_max * np.sqrt(x)
+	return pysptk.sptk.mcep(sp.astype(np.float32), order=hp.num_mgc - 1, alpha=hp.mcep_alpha,
+				maxiter=0, threshold=0.001, etype=1, eps=1.0E-8, min_det=0.0, itype=3)
+
+def sp_denormalize(x):
+	sp = pysptk.sptk.mgc2sp(x.astype(np.float64), order=hp.num_mgc - 1,
+				alpha=hp.mcep_alpha, gamma=0.0, fftlen=hp.n_fft)
+	return np.square(sp / int16_max)
+
+def ap_normalize(x):
+	return x.astype(np.float32)
+
+def ap_denormalize(x, lf0):
+	for i in range(len(lf0)):
+		x[i] = np.where(lf0[i] == 0, np.zeros(x.shape[1]), x[i])
+	return x.astype(np.float64)
+
 
 def world_features_to_one_tensor(f0,sp,ap):
     return np.column_stack((np.column_stack((np.array(f0),np.array(sp))),np.array(ap)))
@@ -16,51 +43,32 @@ def tensor_to_world_features(tensor):
     f0=[]
     sp=[]
     ap = []
+    sp_factor = hp.num_mgc+1
     for i in range(len(tensor)):
-        
-        sp.append(np.array(tensor[i][1:514]))
-        ap.append(np.array(tensor[i][514:]))
         f0.append(np.array(tensor[i][0]))
-    return np.array(f0),np.array(sp),np.array(ap) 
+        sp.append(np.array(tensor[i][1:sp_factor]))
+        ap.append(np.array(tensor[i][sp_factor:]))
+        
+    return np.array(f0),np.array(sp),np.array(ap)
 
 def wav2world(wavfile):
-    x, fs = librosa.load(wavfile, dtype=np.float64)
-    return pw.wav2world(x, fs)
-
-def world2wav(f0,sp,ap,fs):
-    return pw.synthesize(f0, sp, ap, fs, pw.default_frame_period)
-
-def unpad_world(mel,world):
-    '''
-    mel: input Mel spectrogram not pad.
-    world: world features predict tensor.
-    return unpad tensor world features.
-    '''     
-
-    t = mel.shape[0]
-    t2=world.shape[0]
-    
-    num_paddings = hp.padf - (t % hp.padf) if t % hp.padf != 0 else 0
-    unpad = world[:t2-num_paddings]
-        
-    return unpad
-    
-def pad_mel_world(mel,world=None):
-    '''
-    mel: Mel spectrogram.
-    world: world features for train. if None ignore pad for world features
-    return Mel spectrogram e world features. if world==None return same Mel Spectrogram.
-    '''    
-    t = mel.shape[0]
-    
-    num_paddings = hp.padf - (t % hp.padf) if t % hp.padf != 0 else 0
-    mel = np.pad(mel, [[0, num_paddings], [0, 0]], mode="constant")
-    if(world is not None):
-        world = np.pad(world, [[0, num_paddings], [0, 0]], mode="constant")
-        return mel,world
-    return mel
+    wav, fs = sf.read(wavfile)
+    f0,sp,ap=vocoder.wav2world(wav,fs , hp.n_fft, ap_depth=hp.num_bap)
+    # feature normalization
+    lf0 = f0_normalize(f0)
+    mgc = sp_normalize(sp)
+    bap = ap_normalize(ap)
+    return np.array(world_features_to_one_tensor(lf0,mgc,bap))
 
 
+def world2wav(lf0, mgc, bap):
+	lf0 = np.where(lf0 < 1, 0.0, lf0)
+	f0 = f0_denormalize(lf0)
+	sp = sp_denormalize(mgc)
+	ap = ap_denormalize(bap, lf0)
+	print('features denomalize',lf0.shape,sp.shape,ap.shape)
+	wav = vocoder.synthesize(f0, sp, ap,hp.sr_dataset)
+	return wav
 
 def get_spectrograms(fpath):
     '''Parse the wave file in `fpath` and

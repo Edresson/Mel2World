@@ -22,17 +22,10 @@ data_lenght=len(data_list)
 
 for i in tqdm.tqdm(range(0,data_lenght)):
     mel= np.array(load_spectrograms(hp.data_dir+'/'+data_list[i])) # mel spectrogram
-    f0,sp,ap=wav2world(hp.data_dir+'/'+data_list[i])
-    world=np.array(world_features_to_one_tensor(f0,sp,ap)) # world features
+    world=wav2world(hp.data_dir+'/'+data_list[i])
+    num_padding = mel.shape[0]*8 - world.shape[0] 
+    world = np.pad(world, [[0, num_padding], [0, 0]], mode="constant")
     np.save("mels/{}".format(data_list[i].replace("wav", "npy")), mel)
     np.save("worlds/{}".format(data_list[i].replace("wav", "npy")), world)
 
-'''
-for i in tqdm.tqdm(range(int(data_lenght/2) +1,data_lenght)):
-    XTest.append(np.array(load_spectrograms(hp.data_dir+'/'+data_list[i]))) # mel spectrogram
-    f0,sp,ap=wav2world(hp.data_dir+'/'+data_list[i])
-    YTest.append(np.array(world_features_to_one_tensor(f0,sp,ap))) # world features
-
-np.save("data/X_test.npy", np.array(XTest))
-np.save("data/Y_test.npy", np.array(YTest))'''
 
