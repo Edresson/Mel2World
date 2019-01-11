@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
 #/usr/bin/python2
-'''
-By kyubyong park. kbpark.linguist@gmail.com. 
-https://www.github.com/kyubyong/dc_tts
-'''
-
 from __future__ import print_function
 
 from hyperparams import Hyperparams as hp
@@ -17,16 +12,33 @@ import os
 import unicodedata
 import sys
 import librosa
-def load_data():
+def load_data(mode = 'train'):
     '''Loads data
     '''
     fpaths=os.listdir('mels\\')
-    audio_lenghts = []
-    for path in fpaths:
-        audio_lenghts.append(librosa.get_duration(filename=os.path.join(hp.data_dir,path.replace('.npy','.wav'))))    
-    return fpaths, audio_lenghts
+    return_fpaths = []
+    if mode == 'train':
+        audio_lenghts = []
+        for path in fpaths:
+            file_name,_ = path.split('.')
+            #print(file_name)
+            file_id = int(file_name.split('-')[1])
+            #ignore test
+            if file_id >=5654 and file_id <=5674:
+                print('file:',path,' ignored ')
+                continue
+            return_fpaths.append(path)
+            audio_lenghts.append(librosa.get_duration(filename=os.path.join(hp.data_dir,path.replace('.npy','.wav'))))    
+        return return_fpaths, audio_lenghts
+    else:
+        # test data
+        for path in fpaths:
+            file_name,_ = path.split('.')
+            file_id = int(file_name.split('-')[1])
+            if file_id >=5654 and file_id <=5674:
+                return_fpaths.append(path)
 
-
+        return return_fpaths
 
 def get_batch():
     """Loads training data and put them in queues"""
