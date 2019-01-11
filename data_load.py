@@ -20,12 +20,10 @@ import librosa
 def load_data():
     '''Loads data
     '''
-    fpaths=os.listdir(hp.data_dir)
+    fpaths=os.listdir('mels\\')
     audio_lenghts = []
     for path in fpaths:
-        audio_lenghts.append(librosa.get_duration(filename=os.path.join(hp.data_dir,path)))
-        
-        
+        audio_lenghts.append(librosa.get_duration(filename=os.path.join(hp.data_dir,path.replace('.npy','.wav'))))    
     return fpaths, audio_lenghts
 
 
@@ -35,7 +33,7 @@ def get_batch():
     with tf.device('/cpu:0'):
         # Load data
         fpaths, audio_lengths = load_data() # list
-        maxlen, minlen = max(audio_lengths), min(audio_lengths)
+        maxlen, minlen = int(max(audio_lengths)), int(min(audio_lengths))
 
         # Calc total batch count
         num_batch = len(fpaths) // hp.B
@@ -64,14 +62,7 @@ def get_batch():
         world.set_shape((None, hp.num_lf0+hp.num_mgc+hp.num_bap))
 
         # Batching
-        _, (mels, worlds, fnames) = tf.contrib.training.bucket_by_sequence_length(
-                                            input_length=audio_length,
-                                            tensors=[mel, world, fname],
-                                            batch_size=hp.B,
-                                            bucket_boundaries=[i for i in range(minlen + 1, maxlen - 1, 20)],
-                                            num_threads=8,
-                                            capacity=hp.B*4,
-                                            dynamic_pad=True)
+        mels, worlds = tf.train.batch([mel, world],batch_size=hp.B,num_threads=4,capacity=hp.B*4, dynamic_pad=True)
 
-    return mels, worlds, fnames, num_batch
+    return mels, worlds,  num_batch
 

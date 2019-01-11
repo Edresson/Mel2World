@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use('pdf')
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import pysptk
 
 int16_max = 32768.0
 

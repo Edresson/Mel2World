@@ -121,7 +121,7 @@ class Graph:
         ## mels: Reduced melspectrogram. (B, T/r, n_mels) float32
         ## worlds: World pad features. (B, T*10, n_fft//2+3) float32
         if mode=="train":
-            self.mels, self.worlds, self.fnames, self.num_batch = get_batch()
+            self.mels, self.worlds, self.num_batch = get_batch()
             
         else:  # Synthesize
             self.mels = tf.placeholder(tf.float32, shape=(None, None, hp.n_mels))
@@ -176,16 +176,20 @@ if __name__ == '__main__':
 
     logdir = hp.logdir + "-" + str(3)
     sv = tf.train.Supervisor(logdir=logdir, save_model_secs=0, global_step=g.global_step)
+    run = True
     with sv.managed_session() as sess:
-        while 1:
-            for _ in tqdm(range(g.num_batch), total=g.num_batch, ncols=70, leave=False, unit='b'):
+        while run:
+            for _ in range(g.num_batch):
                 gs, _ = sess.run([g.global_step, g.train_op])
-
+                
                 # Write checkpoint files at every 1k steps
                 if gs % 1000 == 0:
-                    sv.saver.save(sess, logdir + '/model_gs_{}'.format(str(gs // 1000).zfill(3) + "k")
+                    print('train steps:',gs)
+                    sv.saver.save(sess, logdir + '/model_gs_{}'.format(str(gs // 1000).zfill(3) + "k"))
 
                 # break
-                if gs > hp.num_iterations: break
+                if gs > hp.num_iterations:
+                    run = False
+                
 
     print("Done")
